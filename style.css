@@ -19,6 +19,9 @@ body{
   padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);
 }
 button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+/* Icon-only buttons: system font keeps emoji vertically centered (Baloo 2's
+   metrics push them off-center in Safari); the webfont is for readable text. */
+.tool,.new-card,.thumb.add,.ask-btns button,.del{font-family:ui-rounded,"Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif}
 button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
 .hidden{display:none!important}
 .screen{height:100%;display:flex;flex-direction:column}
