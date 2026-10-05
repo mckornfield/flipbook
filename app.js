@@ -92,10 +92,29 @@ function ask() {
   });
 }
 
+/* ---------- URL routing (reflects current book/page; no history stack) ---------- */
+function parseRoute() {
+  const m = location.hash.match(/^#\/b\/([^/]+)\/p\/(\d+)$/);
+  return m ? {bookId: m[1], page: parseInt(m[2], 10) - 1} : null;
+}
+function syncRoute() {
+  const h = book ? `#/b/${book.id}/p/${cur + 1}` : '';
+  if (location.hash !== h) history.replaceState(null, '', h || location.pathname + location.search);
+}
+async function applyRoute() {
+  const r = parseRoute();
+  if (!r) return showGallery();
+  const b = (await dbAll()).find(x => x.id === r.bookId);
+  if (!b) return showGallery();
+  book = b; cur = Math.min(Math.max(r.page, 0), b.frames.length - 1);
+  show('editor'); renderStrip(); loadFrame();
+}
+window.addEventListener('popstate', applyRoute);
+
 /* ---------- gallery ---------- */
 async function showGallery() {
   await flush(); book = null;
-  stopPlay();
+  stopPlay(); syncRoute();
   const books = (await dbAll()).sort((a, b) => b.updated - a.updated);
   const grid = $('grid'); grid.textContent = '';
   const nb = document.createElement('button');
@@ -121,7 +140,7 @@ function newBook() {
   const b = {id: uid(), created: Date.now(), updated: Date.now(), frames: ['']};
   dbPut(b); openBook(b);
 }
-function openBook(b) { book = b; cur = 0; show('editor'); renderStrip(); loadFrame(); }
+function openBook(b) { book = b; cur = 0; show('editor'); syncRoute(); renderStrip(); loadFrame(); }
 
 /* ---------- pages ---------- */
 function renderStrip() {
@@ -155,19 +174,27 @@ async function loadFrame() {
   ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, W, H); if (img) ctx.drawImage(img, 0, 0, W, H);
   octx.clearRect(0, 0, W, H); if (pimg) octx.drawImage(pimg, 0, 0, W, H);
+  $('copyBtn').disabled = !pimg;
   ready = true;
 }
-function goTo(i) { if (i === cur) return; cur = i; renderStrip(); loadFrame(); }
+function goTo(i) { if (i === cur) return; cur = i; syncRoute(); renderStrip(); loadFrame(); }
 function addPage() {
   if (book.frames.length >= MAX_PAGES) return;
   book.frames.splice(cur + 1, 0, ''); cur++;
-  touch(); renderStrip(); loadFrame();
+  touch(); syncRoute(); renderStrip(); loadFrame();
 }
 $('trashBtn').onclick = async () => {
   if (!(await ask())) return;
   if (book.frames.length === 1) book.frames[0] = '';
   else { book.frames.splice(cur, 1); cur = Math.min(cur, book.frames.length - 1); }
-  touch(); renderStrip(); loadFrame();
+  touch(); syncRoute(); renderStrip(); loadFrame();
+};
+$('copyBtn').onclick = () => {
+  if (!ready || cur === 0 || !book.frames[cur - 1]) return;
+  undoStack.push(ctx.getImageData(0, 0, W, H)); if (undoStack.length > 10) undoStack.shift(); updateUndo();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, W, H); ctx.drawImage($('onion'), 0, 0, W, H);
+  commit();
 };
 
 /* ---------- drawing ---------- */
@@ -363,5 +390,5 @@ $('exportClose').onclick = () => $('export').classList.add('hidden');
 /* ---------- start ---------- */
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
-syncTools(); syncSpeed(); showGallery();
+syncTools(); syncSpeed(); applyRoute();
 })();
