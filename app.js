@@ -1,0 +1,368 @@
+(() => {
+const W = 800, H = 600, MAX_PAGES = 24;
+const COLORS = ['#1D1B3A','#FF3B30','#FF8A00','#FFD400','#2EC84A','#1E88FF','#8A4DFF','#FF5FB8','#8B5A2B','#7FD9FF'];
+const NAMES  = ['Black','Red','Orange','Yellow','Green','Blue','Purple','Pink','Brown','Sky blue'];
+const SIZES = [8, 18, 36], DOTS = [10, 18, 28];
+const SPEEDS = [{e:'🐌', f:2, l:'Slow'}, {e:'🐢', f:4, l:'Medium'}, {e:'🐇', f:8, l:'Fast'}];
+const $ = id => document.getElementById(id);
+
+let book = null, cur = 0, color = COLORS[0], size = SIZES[1], erasing = false, fps = 4;
+let saveT = null, undoStack = [], ready = false, loadToken = 0;
+
+const canvas = $('draw'), ctx = canvas.getContext('2d', {willReadFrequently: true});
+const octx = $('onion').getContext('2d');
+const pctx = $('playCanvas').getContext('2d');
+
+/* ---------- storage (IndexedDB, with in-memory fallback) ---------- */
+let dbp = null; const mem = new Map();
+function openDb() {
+  if (!dbp) dbp = new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open('flipbook', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('books', {keyPath: 'id'});
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  });
+  return dbp;
+}
+async function dbAll() {
+  try {
+    const db = await openDb();
+    return await new Promise((res, rej) => {
+      const r = db.transaction('books').objectStore('books').getAll();
+      r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+    });
+  } catch (e) { return [...mem.values()]; }
+}
+async function dbPut(b) {
+  mem.set(b.id, JSON.parse(JSON.stringify(b)));
+  try {
+    const db = await openDb();
+    await new Promise((res, rej) => {
+      const t = db.transaction('books', 'readwrite'); t.objectStore('books').put(b);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+  } catch (e) {}
+}
+async function dbDel(id) {
+  mem.delete(id);
+  try {
+    const db = await openDb();
+    await new Promise((res, rej) => {
+      const t = db.transaction('books', 'readwrite'); t.objectStore('books').delete(id);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+  } catch (e) {}
+}
+function touch() {
+  book.updated = Date.now();
+  clearTimeout(saveT);
+  const b = book; saveT = setTimeout(() => dbPut(b), 400);
+}
+async function flush() { if (book) { clearTimeout(saveT); await dbPut(book); } }
+
+/* ---------- helpers ---------- */
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+function fit(box, el) {
+  const cs = getComputedStyle(box);
+  const bw = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const bh = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  let w = bw, h = w * 0.75;
+  if (h > bh) { h = bh; w = h / 0.75; }
+  el.style.width = Math.max(0, Math.floor(w)) + 'px';
+  el.style.height = Math.max(0, Math.floor(h)) + 'px';
+}
+function fitAll() { fit($('stage'), $('paper')); fit($('pstage'), $('playCanvas')); }
+if (window.ResizeObserver) { const ro = new ResizeObserver(fitAll); ro.observe($('stage')); ro.observe($('pstage')); }
+window.addEventListener('resize', fitAll);
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+function show(name) {
+  $('gallery').classList.toggle('hidden', name !== 'gallery');
+  $('editor').classList.toggle('hidden', name !== 'editor');
+  if (name === 'editor') requestAnimationFrame(fitAll);
+}
+function ask(icon) {
+  return new Promise(res => {
+    $('askIcon').textContent = icon;
+    const o = $('ask'); o.classList.remove('hidden');
+    const done = v => { o.classList.add('hidden'); $('askYes').onclick = $('askNo').onclick = null; res(v); };
+    $('askYes').onclick = () => done(true);
+    $('askNo').onclick = () => done(false);
+  });
+}
+
+/* ---------- gallery ---------- */
+async function showGallery() {
+  await flush(); book = null;
+  stopPlay();
+  const books = (await dbAll()).sort((a, b) => b.updated - a.updated);
+  const grid = $('grid'); grid.textContent = '';
+  const nb = document.createElement('button');
+  nb.className = 'new-card'; nb.textContent = '+'; nb.setAttribute('aria-label', 'New flipbook');
+  nb.onclick = newBook; grid.append(nb);
+  for (const b of books) {
+    const wrap = document.createElement('div'); wrap.className = 'card-wrap';
+    const open = document.createElement('button'); open.className = 'card'; open.setAttribute('aria-label', 'Open flipbook');
+    const first = b.frames.find(f => f);
+    const pic = document.createElement(first ? 'img' : 'div'); pic.className = 'pic';
+    if (first) { pic.src = first; pic.alt = ''; }
+    const count = document.createElement('div'); count.className = 'count';
+    count.textContent = b.frames.length + (b.frames.length === 1 ? ' page' : ' pages');
+    open.append(pic, count); open.onclick = () => openBook(b);
+    const del = document.createElement('button'); del.className = 'del'; del.textContent = '✕';
+    del.setAttribute('aria-label', 'Delete flipbook');
+    del.onclick = async () => { if (await ask('🗑️📒')) { await dbDel(b.id); showGallery(); } };
+    wrap.append(open, del); grid.append(wrap);
+  }
+  show('gallery');
+}
+function newBook() {
+  const b = {id: uid(), created: Date.now(), updated: Date.now(), frames: ['']};
+  dbPut(b); openBook(b);
+}
+function openBook(b) { book = b; cur = 0; show('editor'); renderStrip(); loadFrame(); }
+
+/* ---------- pages ---------- */
+function renderStrip() {
+  const s = $('strip'); s.textContent = '';
+  book.frames.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.className = 'thumb' + (i === cur ? ' on' : '');
+    b.setAttribute('aria-label', 'Page ' + (i + 1));
+    if (f) { const im = document.createElement('img'); im.src = f; im.alt = ''; b.append(im); }
+    b.onclick = () => goTo(i); s.append(b);
+  });
+  const add = document.createElement('button');
+  add.className = 'thumb add'; add.textContent = '+'; add.setAttribute('aria-label', 'Add a page');
+  add.disabled = book.frames.length >= MAX_PAGES; add.onclick = addPage; s.append(add);
+  const on = s.querySelector('.on');
+  if (on) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
+}
+function updateThumb(i) {
+  const b = $('strip').children[i]; if (!b) return;
+  let im = b.querySelector('img');
+  if (!book.frames[i]) { if (im) im.remove(); return; }
+  if (!im) { im = document.createElement('img'); im.alt = ''; b.append(im); }
+  im.src = book.frames[i];
+}
+async function loadFrame() {
+  const t = ++loadToken; ready = false;
+  undoStack = []; updateUndo();
+  const src = book.frames[cur], prev = cur > 0 ? book.frames[cur - 1] : '';
+  const [img, pimg] = await Promise.all([src ? loadImg(src) : null, prev ? loadImg(prev) : null]);
+  if (t !== loadToken) return;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, W, H); if (img) ctx.drawImage(img, 0, 0, W, H);
+  octx.clearRect(0, 0, W, H); if (pimg) octx.drawImage(pimg, 0, 0, W, H);
+  ready = true;
+}
+function goTo(i) { if (i === cur) return; cur = i; renderStrip(); loadFrame(); }
+function addPage() {
+  if (book.frames.length >= MAX_PAGES) return;
+  book.frames.splice(cur + 1, 0, ''); cur++;
+  touch(); renderStrip(); loadFrame();
+}
+$('trashBtn').onclick = async () => {
+  if (!(await ask('🗑️📄'))) return;
+  if (book.frames.length === 1) book.frames[0] = '';
+  else { book.frames.splice(cur, 1); cur = Math.min(cur, book.frames.length - 1); }
+  touch(); renderStrip(); loadFrame();
+};
+
+/* ---------- drawing ---------- */
+let active = null, last = null;
+function pt(e) {
+  const r = canvas.getBoundingClientRect();
+  return {x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height};
+}
+function styleCtx() {
+  ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+  ctx.strokeStyle = ctx.fillStyle = color;
+  ctx.lineWidth = erasing ? size * 1.8 : size;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+}
+function dot(p) { ctx.beginPath(); ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill(); }
+function seg(a, b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+canvas.addEventListener('pointerdown', e => {
+  if (!ready || active !== null) return;
+  e.preventDefault();
+  active = e.pointerId;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  undoStack.push(ctx.getImageData(0, 0, W, H)); if (undoStack.length > 10) undoStack.shift(); updateUndo();
+  styleCtx(); last = pt(e); dot(last);
+});
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerId !== active) return;
+  e.preventDefault();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (evs.length ? evs : [e])) { const p = pt(ev); seg(last, p); last = p; }
+});
+function endStroke(e) {
+  if (e.pointerId !== active) return;
+  active = null; commit();
+}
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+function commit() {
+  book.frames[cur] = canvas.toDataURL('image/png');
+  updateThumb(cur); touch();
+}
+function updateUndo() { $('undoBtn').disabled = undoStack.length === 0; }
+$('undoBtn').onclick = () => {
+  const snap = undoStack.pop(); if (!snap) return;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.putImageData(snap, 0, 0); updateUndo(); commit();
+};
+
+/* ---------- tools ---------- */
+const crayonBtns = COLORS.map((c, i) => {
+  const b = document.createElement('button'); b.className = 'crayon';
+  b.style.setProperty('--c', c); b.setAttribute('aria-label', NAMES[i]);
+  b.onclick = () => { color = c; erasing = false; syncTools(); };
+  $('crayons').insertBefore(b, $('lip')); return b;
+});
+const sizeBtns = SIZES.map((s, i) => {
+  const b = document.createElement('button'); b.className = 'tool size';
+  b.setAttribute('aria-label', ['Thin', 'Medium', 'Thick'][i] + ' brush');
+  const d = document.createElement('span'); d.className = 'dot';
+  d.style.width = d.style.height = DOTS[i] + 'px'; b.append(d);
+  b.onclick = () => { size = s; syncTools(); };
+  $('sizes').append(b); return b;
+});
+$('eraserBtn').onclick = () => { erasing = !erasing; syncTools(); };
+function syncTools() {
+  crayonBtns.forEach((b, i) => b.classList.toggle('on', !erasing && COLORS[i] === color));
+  sizeBtns.forEach((b, i) => b.classList.toggle('on', SIZES[i] === size));
+  $('eraserBtn').classList.toggle('on', erasing);
+  document.documentElement.style.setProperty('--cur', color);
+}
+$('homeBtn').onclick = showGallery;
+
+/* ---------- play ---------- */
+let playT = null, playImgs = [], pi = 0;
+const speedBtns = SPEEDS.map(s => {
+  const b = document.createElement('button'); b.className = 'tool'; b.textContent = s.e;
+  b.setAttribute('aria-label', s.l);
+  b.onclick = () => { fps = s.f; syncSpeed(); };
+  $('speeds').append(b); return b;
+});
+function syncSpeed() { speedBtns.forEach((b, i) => b.classList.toggle('on', SPEEDS[i].f === fps)); }
+async function startPlay() {
+  flush();
+  playImgs = await Promise.all(book.frames.map(f => f ? loadImg(f) : null));
+  pi = 0; $('player').classList.remove('hidden');
+  fitAll(); syncSpeed(); clearTimeout(playT); tick();
+}
+function tick() {
+  pctx.fillStyle = '#fff'; pctx.fillRect(0, 0, W, H);
+  const im = playImgs[pi]; if (im) pctx.drawImage(im, 0, 0, W, H);
+  pi = (pi + 1) % playImgs.length;
+  playT = setTimeout(tick, 1000 / fps);
+}
+function stopPlay() { clearTimeout(playT); playT = null; $('player').classList.add('hidden'); }
+$('playBtn').onclick = startPlay;
+$('playClose').onclick = stopPlay;
+
+/* ---------- GIF export ---------- */
+const PAL = ['#FFFFFF', ...COLORS];
+while (PAL.length < 16) PAL.push('#FFFFFF');
+const PAL_RGB = PAL.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+function nearest(r, g, b) {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < 11; i++) {
+    const p = PAL_RGB[i], d = (r - p[0]) ** 2 + (g - p[1]) ** 2 + (b - p[2]) ** 2;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function lzw(idx, min) {
+  const clear = 1 << min, eoi = clear + 1, out = [];
+  let size = min + 1, next = eoi + 1, cur = 0, bits = 0, dict = new Map();
+  const emit = c => { cur |= c << bits; bits += size; while (bits >= 8) { out.push(cur & 255); cur >>>= 8; bits -= 8; } };
+  emit(clear);
+  let pre = idx[0];
+  for (let i = 1; i < idx.length; i++) {
+    const k = idx[i], key = (pre << 8) | k, c = dict.get(key);
+    if (c !== undefined) { pre = c; continue; }
+    emit(pre);
+    if (next === 4096) { emit(clear); next = eoi + 1; size = min + 1; dict = new Map(); }
+    else { if (next >= (1 << size)) size++; dict.set(key, next++); }
+    pre = k;
+  }
+  emit(pre); emit(eoi);
+  if (bits > 0) out.push(cur & 255);
+  return out;
+}
+function encodeGif(frames, w, h, delay) {
+  const o = [];
+  const w16 = v => o.push(v & 255, (v >> 8) & 255);
+  for (const ch of 'GIF89a') o.push(ch.charCodeAt(0));
+  w16(w); w16(h); o.push(0xF3, 0, 0);
+  for (const [r, g, b] of PAL_RGB) o.push(r, g, b);
+  o.push(0x21, 0xFF, 0x0B); for (const ch of 'NETSCAPE2.0') o.push(ch.charCodeAt(0)); o.push(3, 1, 0, 0, 0);
+  for (const idx of frames) {
+    o.push(0x21, 0xF9, 4, 0x04); w16(delay); o.push(0, 0);
+    o.push(0x2C); w16(0); w16(0); w16(w); w16(h); o.push(0);
+    o.push(4);
+    const data = lzw(idx, 4);
+    for (let i = 0; i < data.length; i += 255) {
+      const n = Math.min(255, data.length - i); o.push(n);
+      for (let j = 0; j < n; j++) o.push(data[i + j]);
+    }
+    o.push(0);
+  }
+  o.push(0x3B);
+  return new Uint8Array(o);
+}
+let exportFile = null;
+$('exportBtn').onclick = async () => {
+  flush();
+  const img = $('exportImg');
+  img.classList.add('hidden'); $('shareNow').classList.add('hidden');
+  $('exportMsg').textContent = 'Making your movie…';
+  $('export').classList.remove('hidden');
+  await new Promise(r => setTimeout(r, 50));
+  try {
+    const gw = 400, gh = 300;
+    const c = document.createElement('canvas'); c.width = gw; c.height = gh;
+    const x = c.getContext('2d', {willReadFrequently: true});
+    const imgs = await Promise.all(book.frames.map(f => f ? loadImg(f) : null));
+    const cache = new Map(), frames = [];
+    for (const im of imgs) {
+      x.fillStyle = '#fff'; x.fillRect(0, 0, gw, gh);
+      if (im) x.drawImage(im, 0, 0, gw, gh);
+      const d = x.getImageData(0, 0, gw, gh).data, idx = new Uint8Array(gw * gh);
+      for (let p = 0, q = 0; p < idx.length; p++, q += 4) {
+        const key = (d[q] << 16) | (d[q + 1] << 8) | d[q + 2];
+        let v = cache.get(key);
+        if (v === undefined) { v = nearest(d[q], d[q + 1], d[q + 2]); cache.set(key, v); }
+        idx[p] = v;
+      }
+      frames.push(idx);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const blob = new Blob([encodeGif(frames, gw, gh, Math.max(2, Math.round(100 / fps)))], {type: 'image/gif'});
+    exportFile = new File([blob], 'flipbook.gif', {type: 'image/gif'});
+    img.src = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+    img.classList.remove('hidden');
+    const canShare = !!(navigator.canShare && navigator.canShare({files: [exportFile]}));
+    $('shareNow').classList.toggle('hidden', !canShare);
+    $('exportMsg').textContent = canShare
+      ? 'Tap share to send it, or press and hold the picture and tap Save to Photos.'
+      : 'Press and hold the picture, then tap Save to Photos.';
+  } catch (e) {
+    $('exportMsg').textContent = 'The movie could not be made. Close this and try again.';
+  }
+};
+$('shareNow').onclick = async () => {
+  try { await navigator.share({files: [exportFile]}); } catch (e) {}
+};
+$('exportClose').onclick = () => $('export').classList.add('hidden');
+
+/* ---------- start ---------- */
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
+document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+syncTools(); syncSpeed(); showGallery();
+})();
