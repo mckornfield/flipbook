@@ -72,9 +72,8 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
 #playCanvas{display:block;background:#fff;border-radius:12px;box-shadow:0 8px 0 var(--shadow)}
 .prow{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
 .prow .tool{width:72px;height:72px;font-size:36px}
-#ask{background:rgba(10,15,50,.6)}
-.ask-card{background:var(--paper);color:var(--ink);border-radius:24px;padding:24px 30px;display:flex;flex-direction:column;align-items:center;gap:18px;box-shadow:0 8px 0 var(--shadow)}
-.ask-icon{font-size:72px;line-height:1}
+#ask{background:rgba(0,0,0,.55)}
+.ask-card{background:var(--paper);color:var(--ink);border-radius:24px;padding:30px;display:flex;flex-direction:column;align-items:center;gap:18px;box-shadow:0 8px 0 var(--shadow)}
 .ask-btns{display:flex;gap:16px}
 .ask-btns button{width:92px;height:74px;border:none;border-radius:18px;font-size:40px;font-weight:800;color:#fff}
 #askNo{background:var(--no)} #askYes{background:var(--yes)}

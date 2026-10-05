@@ -83,9 +83,8 @@ function show(name) {
   $('editor').classList.toggle('hidden', name !== 'editor');
   if (name === 'editor') requestAnimationFrame(fitAll);
 }
-function ask(icon) {
+function ask() {
   return new Promise(res => {
-    $('askIcon').textContent = icon;
     const o = $('ask'); o.classList.remove('hidden');
     const done = v => { o.classList.add('hidden'); $('askYes').onclick = $('askNo').onclick = null; res(v); };
     $('askYes').onclick = () => done(true);
@@ -113,7 +112,7 @@ async function showGallery() {
     open.append(pic, count); open.onclick = () => openBook(b);
     const del = document.createElement('button'); del.className = 'del'; del.textContent = '✕';
     del.setAttribute('aria-label', 'Delete flipbook');
-    del.onclick = async () => { if (await ask('🗑️📒')) { await dbDel(b.id); showGallery(); } };
+    del.onclick = async () => { if (await ask()) { await dbDel(b.id); showGallery(); } };
     wrap.append(open, del); grid.append(wrap);
   }
   show('gallery');
@@ -165,7 +164,7 @@ function addPage() {
   touch(); renderStrip(); loadFrame();
 }
 $('trashBtn').onclick = async () => {
-  if (!(await ask('🗑️📄'))) return;
+  if (!(await ask())) return;
   if (book.frames.length === 1) book.frames[0] = '';
   else { book.frames.splice(cur, 1); cur = Math.min(cur, book.frames.length - 1); }
   touch(); renderStrip(); loadFrame();
