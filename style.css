@@ -95,12 +95,15 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
   .thumb.add{font-size:24px}
   .stage{padding:4px 10px}
   .paper{box-shadow:0 5px 0 var(--shadow)}
-  .tools{flex-wrap:nowrap;gap:10px 14px;padding:4px 10px 8px}
-  .group{gap:6px}
-  .crayons{height:54px;gap:4px;padding:0 8px}
-  .crayon{width:28px;height:34px}
-  .crayon.on{height:52px}
-  .box-lip{height:16px;border-radius:6px 6px 8px 8px}
+  #editor{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr)}
+  .topbar{grid-column:1/-1}
+  .tools{flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:12px;padding:6px 10px 8px 0;overflow-y:auto;min-height:0;scrollbar-width:none}
+  .tools::-webkit-scrollbar{display:none}
+  .group{gap:6px;flex-wrap:wrap;justify-content:center;max-width:150px}
+  .crayons{display:grid;grid-template-columns:repeat(5,28px);gap:6px;height:auto;padding:0}
+  .crayon,.crayon.on{width:28px;height:28px;border-radius:50%;clip-path:none;background-image:none}
+  .crayon.on{outline:3px solid var(--sun);outline-offset:1px}
+  .box-lip{display:none}
   .overlay{flex-direction:row;gap:12px}
   .pstage{width:auto;height:100%;flex:1}
   .prow{flex-direction:column;flex-wrap:nowrap}
