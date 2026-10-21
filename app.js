@@ -62,6 +62,8 @@ function touch() {
 async function flush() { if (book) { clearTimeout(saveT); await dbPut(book); } }
 
 /* ---------- helpers ---------- */
+function lbl(el, text) { el.setAttribute('aria-label', text); el.title = text; }
+document.querySelectorAll('button[aria-label]').forEach(b => { b.title = b.getAttribute('aria-label'); });
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 function fit(box, el) {
@@ -118,11 +120,11 @@ async function showGallery() {
   const books = (await dbAll()).sort((a, b) => b.updated - a.updated);
   const grid = $('grid'); grid.textContent = '';
   const nb = document.createElement('button');
-  nb.className = 'new-card'; nb.textContent = '+'; nb.setAttribute('aria-label', 'New flipbook');
+  nb.className = 'new-card'; nb.textContent = '+'; lbl(nb, 'New flipbook');
   nb.onclick = newBook; grid.append(nb);
   for (const b of books) {
     const wrap = document.createElement('div'); wrap.className = 'card-wrap';
-    const open = document.createElement('button'); open.className = 'card'; open.setAttribute('aria-label', 'Open flipbook');
+    const open = document.createElement('button'); open.className = 'card'; lbl(open, 'Open flipbook');
     const first = b.frames.find(f => f);
     const pic = document.createElement(first ? 'img' : 'div'); pic.className = 'pic';
     if (first) { pic.src = first; pic.alt = ''; }
@@ -130,7 +132,7 @@ async function showGallery() {
     count.textContent = b.frames.length + (b.frames.length === 1 ? ' page' : ' pages');
     open.append(pic, count); open.onclick = () => openBook(b);
     const del = document.createElement('button'); del.className = 'del'; del.textContent = '✕';
-    del.setAttribute('aria-label', 'Delete flipbook');
+    lbl(del, 'Delete flipbook');
     del.onclick = async () => { if (await ask()) { await dbDel(b.id); showGallery(); } };
     wrap.append(open, del); grid.append(wrap);
   }
@@ -148,12 +150,12 @@ function renderStrip() {
   book.frames.forEach((f, i) => {
     const b = document.createElement('button');
     b.className = 'thumb' + (i === cur ? ' on' : '');
-    b.setAttribute('aria-label', 'Page ' + (i + 1));
+    lbl(b, 'Page ' + (i + 1));
     if (f) { const im = document.createElement('img'); im.src = f; im.alt = ''; b.append(im); }
     b.onclick = () => goTo(i); s.append(b);
   });
   const add = document.createElement('button');
-  add.className = 'thumb add'; add.textContent = '+'; add.setAttribute('aria-label', 'Add a page');
+  add.className = 'thumb add'; add.textContent = '+'; lbl(add, 'Add a page');
   add.disabled = book.frames.length >= MAX_PAGES; add.onclick = addPage; s.append(add);
   const on = s.querySelector('.on');
   if (on) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
@@ -245,13 +247,13 @@ $('undoBtn').onclick = () => {
 /* ---------- tools ---------- */
 const crayonBtns = COLORS.map((c, i) => {
   const b = document.createElement('button'); b.className = 'crayon';
-  b.style.setProperty('--c', c); b.setAttribute('aria-label', NAMES[i]);
+  b.style.setProperty('--c', c); lbl(b, NAMES[i]);
   b.onclick = () => { color = c; erasing = false; syncTools(); };
   $('crayons').insertBefore(b, $('lip')); return b;
 });
 const sizeBtns = SIZES.map((s, i) => {
   const b = document.createElement('button'); b.className = 'tool size';
-  b.setAttribute('aria-label', ['Thin', 'Medium', 'Thick'][i] + ' brush');
+  lbl(b, ['Thin', 'Medium', 'Thick'][i] + ' brush');
   const d = document.createElement('span'); d.className = 'dot';
   d.style.width = d.style.height = DOTS[i] + 'px'; b.append(d);
   b.onclick = () => { size = s; syncTools(); };
@@ -270,7 +272,7 @@ $('homeBtn').onclick = showGallery;
 let playT = null, playImgs = [], pi = 0;
 const speedBtns = SPEEDS.map(s => {
   const b = document.createElement('button'); b.className = 'tool'; b.textContent = s.e;
-  b.setAttribute('aria-label', s.l);
+  lbl(b, s.l);
   b.onclick = () => { fps = s.f; syncSpeed(); };
   $('speeds').append(b); return b;
 });

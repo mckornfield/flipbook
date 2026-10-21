@@ -83,4 +83,28 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
 #askNo{background:var(--no)} #askYes{background:var(--yes)}
 #exportImg{max-width:100%;max-height:100%;border-radius:12px;background:#fff;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
 #exportMsg{margin:0;font-size:20px;font-weight:600;text-align:center;max-width:32ch}
+/* Phones on their side: shrink the chrome so the drawing area keeps most of the height */
+@media (orientation:landscape) and (max-height:500px){
+  .topbar{gap:8px;padding:6px 10px 0}
+  .tool{width:44px;height:44px;border-radius:12px;font-size:22px;box-shadow:0 3px 0 var(--shadow)}
+  .tool svg{width:26px;height:26px}
+  .play{width:50px;height:50px}
+  .strip{gap:7px;padding:6px 4px 8px}
+  .thumb{width:44px;height:33px;border-width:2px;border-radius:7px}
+  .thumb.on{transform:translateY(-3px)}
+  .thumb.add{font-size:24px}
+  .stage{padding:4px 10px}
+  .paper{box-shadow:0 5px 0 var(--shadow)}
+  .tools{flex-wrap:nowrap;gap:10px 14px;padding:4px 10px 8px}
+  .group{gap:6px}
+  .crayons{height:54px;gap:4px;padding:0 8px}
+  .crayon{width:28px;height:34px}
+  .crayon.on{height:52px}
+  .box-lip{height:16px;border-radius:6px 6px 8px 8px}
+  .overlay{flex-direction:row;gap:12px}
+  .pstage{width:auto;height:100%;flex:1}
+  .prow{flex-direction:column;flex-wrap:nowrap}
+  .prow .tool{width:52px;height:52px;font-size:26px}
+  #exportMsg{font-size:16px;max-width:22ch}
+}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
