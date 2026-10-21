@@ -100,7 +100,8 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
   .tools{flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:12px;padding:6px 10px 8px 0;overflow-y:auto;min-height:0;scrollbar-width:none}
   .tools::-webkit-scrollbar{display:none}
   .group{gap:6px;flex-wrap:wrap;justify-content:center;max-width:150px}
-  .crayons{display:grid;grid-template-columns:repeat(5,28px);gap:6px;height:auto;padding:0}
+  .group:last-child{max-width:100px}
+  .crayons{display:grid;grid-template-columns:repeat(5,28px);gap:6px;height:auto;padding:5px}
   .crayon,.crayon.on{width:28px;height:28px;border-radius:50%;clip-path:none;background-image:none}
   .crayon.on{outline:3px solid var(--sun);outline-offset:1px}
   .box-lip{display:none}
